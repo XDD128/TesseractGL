@@ -1,0 +1,19 @@
+Assignment 4
+Samuel Wong
+all features working
+
+For this project, the speed of the program seemed to decrease when adding more features like textures and skyboxes for some reaosn, maybe due to a problem with constantly computing something. The program works fine though, and I expanded on the scene by making the bookshelves render around the camera. This can be pieced together with instancing and culling to make an infinitely procedurally generated tesseract, but for now, it's too slow to do that.
+
+Mouse clicks from the center will move the camera, which will move farther the further away it is from the center (kind of like a joystick).
+
+Q - Move light left
+E - " Right
+U - " Up
+J - " Down
+I - " Forward
+K - " Back
+
+M - Cycle through materials
+W,A,S,D - camera controls
+Left mouse click - rotate camera
+
