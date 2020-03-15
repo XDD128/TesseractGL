@@ -20,11 +20,13 @@ public:
 
 	void createShape(tinyobj::shape_t & shape);
 	void init();
+	void initInstanced();
 	void measure();
 	void draw(const std::shared_ptr<Program> prog) const;
-
+	void drawInstanced(const std::shared_ptr<Program> prog, glm::mat4 *instanceMat, int amount) const;
 	glm::vec3 min = glm::vec3(0);
 	glm::vec3 max = glm::vec3(0);
+	unsigned int vaoID = 0;
 
 private:
 
@@ -36,7 +38,8 @@ private:
 	unsigned int posBufID = 0;
 	unsigned int norBufID = 0;
 	unsigned int texBufID = 0;
-	unsigned int vaoID = 0;
+	unsigned int instanceID = 0;
+	
 
 };
 

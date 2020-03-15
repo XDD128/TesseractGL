@@ -37,6 +37,7 @@ public:
 	std::shared_ptr<Program> prog;
 	std::shared_ptr<Program> matProg;
 	std::shared_ptr<Program> cubeProg;
+	std::shared_ptr<Program> instProg;
 	shared_ptr<Texture> texture0;
 	shared_ptr<Texture> texture1;
 	shared_ptr<Texture> texture2;
@@ -44,6 +45,8 @@ public:
 	shared_ptr<Shape> mesh;
 
 	unordered_map<int, shared_ptr<Shape>> bmesh;
+
+	unordered_map<int, shared_ptr<Shape>> book;
 	shared_ptr<Shape> cube;
 
 	shared_ptr<Shape> hamster;
@@ -66,6 +69,9 @@ public:
 	float sTheta = 0;
 
 
+	int amount = 455;
+	glm::mat4 *modelMatrices;
+	glm::mat4 *bsMatrices;
 
 	float vTrans = 0;//mc
 	float zTrans = 0;
@@ -77,7 +83,7 @@ public:
 	double posX, posY;
 
 	int cx = 400;
-		int cy = 300;
+	int cy = 300;
 	float maxPitch = 80;
 	float minPitch = -80;
 	float pitch = 0;
@@ -167,7 +173,66 @@ public:
 		}
 	}
 
+	void resize_obj(std::vector<tinyobj::shape_t> &shapes) {
+		float minX, minY, minZ;
+		float maxX, maxY, maxZ;
+		float scaleX, scaleY, scaleZ;
+		float shiftX, shiftY, shiftZ;
+		float epsilon = 0.001;
 
+		minX = minY = minZ = 1.1754E+38F;
+		maxX = maxY = maxZ = -1.1754E+38F;
+
+		//Go through all vertices to determine min and max of each dimension
+		for (size_t i = 0; i < shapes.size(); i++) {
+			for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) {
+				if (shapes[i].mesh.positions[3 * v + 0] < minX) minX = shapes[i].mesh.positions[3 * v + 0];
+				if (shapes[i].mesh.positions[3 * v + 0] > maxX) maxX = shapes[i].mesh.positions[3 * v + 0];
+
+				if (shapes[i].mesh.positions[3 * v + 1] < minY) minY = shapes[i].mesh.positions[3 * v + 1];
+				if (shapes[i].mesh.positions[3 * v + 1] > maxY) maxY = shapes[i].mesh.positions[3 * v + 1];
+
+				if (shapes[i].mesh.positions[3 * v + 2] < minZ) minZ = shapes[i].mesh.positions[3 * v + 2];
+				if (shapes[i].mesh.positions[3 * v + 2] > maxZ) maxZ = shapes[i].mesh.positions[3 * v + 2];
+			}
+		}
+
+		//From min and max compute necessary scale and shift for each dimension
+		float maxExtent, xExtent, yExtent, zExtent;
+		xExtent = maxX - minX;
+		yExtent = maxY - minY;
+		zExtent = maxZ - minZ;
+		if (xExtent >= yExtent && xExtent >= zExtent) {
+			maxExtent = xExtent;
+		}
+		if (yExtent >= xExtent && yExtent >= zExtent) {
+			maxExtent = yExtent;
+		}
+		if (zExtent >= xExtent && zExtent >= yExtent) {
+			maxExtent = zExtent;
+		}
+		scaleX = 2.0 / maxExtent;
+		shiftX = minX + (xExtent / 2.0);
+		scaleY = 2.0 / maxExtent;
+		shiftY = minY + (yExtent / 2.0);
+		scaleZ = 2.0 / maxExtent;
+		shiftZ = minZ + (zExtent) / 2.0;
+
+		//Go through all verticies shift and scale them
+		for (size_t i = 0; i < shapes.size(); i++) {
+			for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) {
+				shapes[i].mesh.positions[3 * v + 0] = (shapes[i].mesh.positions[3 * v + 0] - shiftX) * scaleX;
+				assert(shapes[i].mesh.positions[3 * v + 0] >= -1.0 - epsilon);
+				assert(shapes[i].mesh.positions[3 * v + 0] <= 1.0 + epsilon);
+				shapes[i].mesh.positions[3 * v + 1] = (shapes[i].mesh.positions[3 * v + 1] - shiftY) * scaleY;
+				assert(shapes[i].mesh.positions[3 * v + 1] >= -1.0 - epsilon);
+				assert(shapes[i].mesh.positions[3 * v + 1] <= 1.0 + epsilon);
+				shapes[i].mesh.positions[3 * v + 2] = (shapes[i].mesh.positions[3 * v + 2] - shiftZ) * scaleZ;
+				assert(shapes[i].mesh.positions[3 * v + 2] >= -1.0 - epsilon);
+				assert(shapes[i].mesh.positions[3 * v + 2] <= 1.0 + epsilon);
+			}
+		}
+	}
 	void cursorCallback(GLFWwindow * window, double in_deltaX, double in_deltaY)
 	{
 		
@@ -256,6 +321,8 @@ public:
 		glClearColor(.3f, .3f, .9f, 1.0f);
 		// Enable z-buffer test.
 		glEnable(GL_DEPTH_TEST);
+		//glEnable(GL_CULL_FACE);
+		//glCullFace(GL_BACK);
 
 		matProg = make_shared<Program>();
 		matProg->setVerbose(false);
@@ -274,6 +341,28 @@ public:
 		matProg->addUniform("viewPos");
 		matProg->addAttribute("vertPos");
 		matProg->addAttribute("vertNor");
+		
+
+
+		instProg = make_shared<Program>();
+		instProg->setVerbose(false);
+		instProg->setShaderNames(resourceDirectory + "/mat_verti.glsl", resourceDirectory + "/mat_frag.glsl");
+		instProg->init();
+		instProg->addUniform("P");
+		instProg->addUniform("V");
+		instProg->addUniform("M");
+		instProg->addUniform("modelMatrices");
+
+		instProg->addUniform("MatAmb");
+		instProg->addUniform("MatDif");
+		instProg->addUniform("MatSpec");
+		instProg->addUniform("shine");
+
+		instProg->addUniform("lightPos");
+		instProg->addUniform("viewPos");
+		instProg->addAttribute("vertPos");
+		instProg->addAttribute("vertNor");
+		instProg->addAttribute("instanceMat");
 		// Initialize the GLSL program.
 		//used for textures
 		prog = make_shared<Program>();
@@ -328,7 +417,7 @@ public:
 		vector<tinyobj::shape_t> TOshapes2;
 		vector<tinyobj::shape_t> TOshapes3;
 		vector<tinyobj::shape_t> TOshapes4;
-
+		vector<tinyobj::shape_t> TOshapes5;
 		vector<tinyobj::material_t> objMaterials;
 		string errStr;
 		int i;
@@ -353,7 +442,8 @@ public:
 			cerr << errStr << endl;
 		}
 		else {
-
+			
+			resize_obj(TOshapes4);
 			for (i = 0; i < TOshapes4.size(); i++) {
 				bmesh[i] = make_shared<Shape>();
 				bmesh[i]->createShape(TOshapes4[i]);
@@ -383,6 +473,7 @@ public:
 		}
 		else {
 			cube = make_shared<Shape>();
+			resize_obj(TOshapes2);
 			cube->createShape(TOshapes2[0]);
 			cube->measure();
 			cube->init();
@@ -399,6 +490,54 @@ public:
 			hamster->measure();
 			hamster->init();
 		}
+
+
+		rc = tinyobj::LoadObj(TOshapes5, objMaterials, errStr, (resourceDirectory + "/book.obj").c_str());
+		if (!rc) {
+			cerr << errStr << endl;
+		}
+		else {
+
+			resize_obj(TOshapes5);
+			for (i = 0; i < TOshapes5.size(); i++) {
+				book[i] = make_shared<Shape>();
+				book[i]->createShape(TOshapes5[i]);
+				book[i]->measure();
+				book[i]->init();
+			}
+		}
+		modelMatrices = new glm::mat4[amount];
+
+		//glm::mat4* modelMatrices;
+		//modelMatrices = new glm::mat4[amount];
+		//unsigned int buffer;
+		//glGenBuffers(1, &buffer);
+		//glBindBuffer(GL_ARRAY_BUFFER, buffer);
+		//glBufferData(GL_ARRAY_BUFFER, amount * sizeof(glm::mat4), &modelMatrices[0], GL_STATIC_DRAW);
+		//for (i = 0; i < book.size(); i++)
+		//{
+		//	unsigned int VAO = book[i]->vaoID;
+		//	glBindVertexArray(VAO);
+		//	// set attribute pointers for matrix (4 times vec4)
+		//	
+		//	glEnableVertexAttribArray(3);
+		//	
+		//	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
+
+		//	glEnableVertexAttribArray(4);
+		//	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(sizeof(glm::vec4)));
+		//	glEnableVertexAttribArray(5);
+		//	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(2 * sizeof(glm::vec4)));
+		//	glEnableVertexAttribArray(6);
+		//	glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(3 * sizeof(glm::vec4)));
+
+		//	glVertexAttribDivisor(3, 1);
+		//	glVertexAttribDivisor(4, 1);
+		//	glVertexAttribDivisor(5, 1);
+		//	glVertexAttribDivisor(6, 1);
+
+		//	glBindVertexArray(0);
+		//}
 
 	}
 
@@ -459,7 +598,7 @@ public:
 	void drawBook(shared_ptr<MatrixStack> Model, float tx, float ty, float tz) {
 		Model->translate(vec3(tx, ty, tz));
 		Model->rotate(-1.5708, vec3(0, 1, 0));
-		Model->scale(vec3(0.5, 0.5, 0.5));
+		Model->scale(vec3(0.6, 0.6, 0.6));
 		int i = 0;
 		setModel(matProg, Model);
 		Model->translate(vec3(tx, ty, tz));
@@ -474,11 +613,24 @@ public:
 
 	//void drawWideBook(shared_ptr<MatrixStack> Model, float tx, float ty, float tz)
 
+	void loadbooks(shared_ptr<MatrixStack> Model, glm::mat4 *modelMatrices) {
+		float offset = 0.3 + 0.5*sin(glfwGetTime());
+		for (unsigned int i = 0; i < amount; i++) {
+			offset = 0.3 + 0.5*sin(i*0.4 + glfwGetTime());
+			Model->pushMatrix();
+			Model->translate(vec3(-9.6+0.3*float(i%65), 1.3*float(i/65), offset));
+			Model->rotate(-1.5708, vec3(0, 1, 0));
+			Model->scale(vec3(0.6, 0.6, 0.6));
+			modelMatrices[i] = Model->topMatrix();
+			Model->popMatrix();
+		}
+	}
+	
 	void drawBookRow(shared_ptr<MatrixStack> Model, int numOfBooks, bool left, bool right) {
 		float offset = 0.3 + 0.5*sin(glfwGetTime());
 		Model->pushMatrix();
-		Model->translate(vec3(0, 0, -5));
-		Model->scale(vec3(1, 1, 10));
+		//Model->translate(vec3(0, 0, -5));
+		//Model->scale(vec3(1, 1, 10));
 		drawBook(Model, 0, .7, offset / 10);
 		Model->popMatrix();
 		int i = 1;
@@ -486,13 +638,13 @@ public:
 
 			Model->pushMatrix();
 			offset = 0.3 + 0.5*sin(i*0.4 + glfwGetTime());
-			Model->translate(vec3(0, 0, -5));
-			Model->scale(vec3(1, 1, 10));
+			//Model->translate(vec3(0, 0, -5));
+			//Model->scale(vec3(1, 1, 10));
 			drawBook(Model, i*0.3, .7, offset / 10);
 			Model->popMatrix();
 			Model->pushMatrix();
-			Model->translate(vec3(0, 0, -5));
-			Model->scale(vec3(1, 1, 10));
+			//Model->translate(vec3(0, 0, -5));
+			//Model->scale(vec3(1, 1, 10));
 			drawBook(Model, i*(-0.3), .7, offset / 10);
 			Model->popMatrix();
 
@@ -532,7 +684,7 @@ public:
 			SetMaterial(3);
 			Model->pushMatrix(); //top of bookshelf
 			Model->translate(vec3(0, 1.5, 0));
-			Model->scale(vec3(4, 0.1, 2));
+			Model->scale(vec3(2, 0.1, 2));
 			setModel(matProg, Model);
 			cube->draw(matProg);
 
@@ -554,8 +706,8 @@ public:
 			Model->popMatrix();
 
 			Model->pushMatrix();//back of bookshelf
-			Model->translate(vec3(0, 0.75, -.9));
-			Model->scale(vec3(4, 1.5, 0.1));
+			Model->translate(vec3(0, 0.75, -2));
+			Model->scale(vec3(2, 1.5, 0.1));
 			setModel(matProg, Model);
 			cube->draw(matProg);
 
@@ -602,14 +754,14 @@ public:
 		glUniformMatrix4fv(matProg->getUniform("V"), 1, GL_FALSE, value_ptr(View->topMatrix()));
 		Model->pushMatrix();
 		int i = 0;
-		Model->translate(vec3(0,0,-2));
+		Model->translate(vec3(-4,0,-2));
 		Model->scale(vec3(0.5, 0.5, 0.5));
-		drawBS(Projection, View, Model, 7, true, true);
+		drawBS(Projection, View, Model, 7, true, false);
 		Model->popMatrix();
-		/*
+		
 		for (i = 1; i < 4; i++) {
 			Model->pushMatrix();
-			Model->translate(vec3(-4 + 2 * i, -4, -2));
+			Model->translate(vec3(-4 + 2 * i, 0, -2));
 			Model->scale(vec3(0.5, 0.5, 0.5));
 			drawBS(Projection, View, Model, 7, false, false);
 			Model->popMatrix();
@@ -618,15 +770,31 @@ public:
 
 
 		Model->pushMatrix();
-		Model->translate(vec3(-4 + 2 * i, -4, -2));
+		Model->translate(vec3(-4 + 2 * i, 0, -2));
 		Model->scale(vec3(0.5, 0.5, 0.5));
 		drawBS(Projection, View, Model, 7, false, true);
 		Model->popMatrix();
-		*/
+		
 		matProg->unbind();
 
 	}
 
+	void drawBooks() {
+		unsigned int i;
+		for (unsigned int j = 0; j < amount; j++) {
+			i = 0;
+			glUniformMatrix4fv(matProg->getUniform("M"), 1, GL_FALSE, value_ptr(modelMatrices[j]));
+			SetMaterial(switcher);
+			for (i; i < bmesh.size() - 1; i++) {
+				bmesh[i]->draw(matProg);
+			}
+
+			SetMaterial((switcher + 3) % 4);
+			bmesh[2]->draw(matProg);
+		}
+	}
+
+	
 	void render() {
 		// Get current frame buffer size.
 		int i = 0;
@@ -640,7 +808,7 @@ public:
 
 
 
-		
+
 		la.x = cos(radians(pitch)) * cos(radians(yaw));
 		la.y = sin(radians(pitch));
 		la.z = cos(radians(pitch)) * sin(radians(yaw));
@@ -708,50 +876,75 @@ public:
 		glUniformMatrix4fv(prog->getUniform("V"), 1, GL_FALSE, value_ptr(View->topMatrix()));
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		texture0->bind(prog->getUniform("Texture0")); 
+		texture0->bind(prog->getUniform("Texture0"));
 
 
 
 
 
 		Model->pushMatrix();
-			Model->loadIdentity();
-			//draw hamster
-			Model->pushMatrix();
-			Model->translate(vec3(-2, -1, 2));
-			Model->rotate(sin(sTheta), vec3(0, 1, 0));
-			Model->rotate(.707, vec3(1, 0, 0));
-			Model->scale(vec3(0.25, 0.25, 0.25));
-			setModel(prog, Model);
-			hamster->draw(prog);
-			Model->popMatrix();
-			prog->unbind();
+		Model->loadIdentity();
+		//draw hamster
+		Model->pushMatrix();
+		Model->translate(vec3(-2, -1, 2));
+		Model->rotate(sin(sTheta), vec3(0, 1, 0));
+		Model->rotate(.707, vec3(1, 0, 0));
+		Model->scale(vec3(0.25, 0.25, 0.25));
+		setModel(prog, Model);
+		hamster->draw(prog);
+		Model->popMatrix();
+		prog->unbind();
+
+
+		matProg->bind();
+		glUniform3f(matProg->getUniform("lightPos"), lTransX, lTransY, lTransZ);
+		glUniform3f(matProg->getUniform("viewPos"), eye.x, eye.y, eye.z);
+		glUniformMatrix4fv(matProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+		glUniformMatrix4fv(matProg->getUniform("V"), 1, GL_FALSE, value_ptr(View->topMatrix()));
+
+
+		Model->translate(vec3(0, 0, -5.5));
+		loadbooks(Model, modelMatrices);
+		drawBooks();
+
+
+		//for (unsigned int j = 0; j < amount; j++) {
+		//	i = 0;
+		//	glUniformMatrix4fv(matProg->getUniform("M"), 1, GL_FALSE, value_ptr(modelMatrices[j]));
+		//	SetMaterial(switcher);
+		//	for (i; i < bmesh.size() - 1; i++) {
+		//		bmesh[i]->draw(matProg);
+		//	}
+
+		//	SetMaterial((switcher + 3) % 4);
+		//	bmesh[2]->draw(matProg);
+		//}
 
 
 			//bookshelves have lighting and material
 			//draw front bookshelf
-			Model->pushMatrix();
-			Model->translate(vec3(0, 0, -5.5));
-			drawCross(Projection, View, Model);
-			Model->popMatrix();
-			//draw back bookshelf
-			Model->pushMatrix();
-			Model->translate(vec3(0, 0, 5.5));
-			Model->rotate(radians(180.0f), vec3(0, 1, 0));
-			drawCross(Projection, View, Model);
-			Model->popMatrix();
-			//draw left bookshelf
-			Model->pushMatrix();
-			Model->translate(vec3(-5.5,0, 0));
-			Model->rotate(radians(90.0f), vec3(0, 1, 0));
-			drawCross(Projection, View, Model);
-			Model->popMatrix();
-			//draw right bookshelf
-			Model->pushMatrix();
-			Model->translate(vec3(5.5, 0, 0));
-			Model->rotate(radians(-90.0f), vec3(0, 1, 0));
-			drawCross(Projection, View, Model);
-			Model->popMatrix();
+			//Model->pushMatrix();
+			//Model->translate(vec3(0, 0, -5.5));
+			//drawCross(Projection, View, Model);
+			//Model->popMatrix();
+			////draw back bookshelf
+			//Model->pushMatrix();
+			//Model->translate(vec3(0, 0, 5.5));
+			//Model->rotate(radians(180.0f), vec3(0, 1, 0));
+			//drawCross(Projection, View, Model);
+			//Model->popMatrix();
+			////draw left bookshelf
+			//Model->pushMatrix();
+			//Model->translate(vec3(-5.5,0, 0));
+			//Model->rotate(radians(90.0f), vec3(0, 1, 0));
+			//drawCross(Projection, View, Model);
+			//Model->popMatrix();
+			////draw right bookshelf
+			//Model->pushMatrix();
+			//Model->translate(vec3(5.5, 0, 0));
+			//Model->rotate(radians(-90.0f), vec3(0, 1, 0));
+			//drawCross(Projection, View, Model);
+			//Model->popMatrix();
 
 	
 		Model->popMatrix();
@@ -793,7 +986,6 @@ int main(int argc, char *argv[])
 	application->init(resourceDir);
 	application->initGeom(resourceDir);
 	application->initTex(resourceDir);
-
 	// Loop until the user closes the window.
 	while (!glfwWindowShouldClose(windowManager->getHandle()))
 	{
