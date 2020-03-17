@@ -15,6 +15,7 @@
 #include "WindowManager.h"
 #include "Texture.h"
 #include "stb_image.h"
+#include "Objects.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader/tiny_obj_loader.h>
@@ -56,6 +57,9 @@ public:
 	// Data necessary to give our triangle to OpenGL
 	GLuint VertexBufferID;
 
+
+	Objects **books;
+	Objects *book1;
 	//example data that might be useful when trying to compute bounds on multi-shape
 	bool firstMouse = true;
 	vec3 gMin;
@@ -69,7 +73,7 @@ public:
 	float sTheta = 0;
 
 
-	int amount = 455;
+	int amount = 91;
 	glm::mat4 *modelMatrices;
 	glm::mat4 *bsMatrices;
 
@@ -81,7 +85,7 @@ public:
 	float lTransZ = 2.9;
 
 	double posX, posY;
-
+	float offset = 0.0;
 	int cx = 400;
 	int cy = 300;
 	float maxPitch = 80;
@@ -91,6 +95,8 @@ public:
 	vec3 eye = vec3(0, 0, 0);
 	vec3 la = vec3(0, 0, -1);
 	vec3 up = vec3(0, 1, 0);
+	//dot where we can select books to move
+	vec3 crosshair;
 	float walkSpeed = 0.1;
 	float lookSpeed = 0.1;
 	int switcher = 3;
@@ -263,19 +269,20 @@ public:
 
 		if (action == GLFW_PRESS)
 		{
-			glfwGetCursorPos(window, &posX, &posY);
-			float dx = posX - cx;
-			float dy = cy - posY;
 
-			yaw += dx * lookSpeed;
-			pitch += dy * lookSpeed;
-			
-			if (pitch > maxPitch)
-				pitch = maxPitch;
-			if (pitch < minPitch)
-				pitch = minPitch;
+			//glfwGetCursorPos(window, &posX, &posY);
+			//float dx = posX - cx;
+			//float dy = cy - posY;
 
-			cout << "Pos X " << posX << " Pos Y " << posY << endl;
+			//yaw += dx * lookSpeed;
+			//pitch += dy * lookSpeed;
+			//
+			//if (pitch > maxPitch)
+			//	pitch = maxPitch;
+			//if (pitch < minPitch)
+			//	pitch = minPitch;
+
+			cout << "Pos X " << crosshair.x << " Pos Y " << crosshair.y << " Pos Z " << crosshair.z << endl;
 		}
 	}
 
@@ -464,6 +471,23 @@ public:
 			//cout << "The amount of meshes is " << i;
 		}
 
+		mat4 model = glm::mat4(1.0f);
+		for (int j = 0; j < amount; j++) {
+			books[j] = new Objects(vec3(gMin.x, gMin.y, gMin.z), vec3(gMax.x, gMax.y, gMax.z), j);
+			books[j]->transformAABB(model);
+			books->updateAABB();
+		}
+		book1 = new Objects(vec3(gMin.x, gMin.y, gMin.z), vec3(gMax.x, gMax.y, gMax.z), 1);
+
+		
+		
+		mat4 model = glm::mat4(1.0f);
+
+
+		model = glm::translate(model, glm::vec3(0, 0, 5));
+
+		book1->transformAABB(model);
+
 		gMin.x = mesh->min.x;
 		gMin.y = mesh->min.y;
 
@@ -597,11 +621,11 @@ public:
 	//void drawMultMesh()
 	void drawBook(shared_ptr<MatrixStack> Model, float tx, float ty, float tz) {
 		Model->translate(vec3(tx, ty, tz));
-		Model->rotate(-1.5708, vec3(0, 1, 0));
-		Model->scale(vec3(0.6, 0.6, 0.6));
+		//Model->rotate(-1.5708, vec3(0, 1, 0));
+		//Model->scale(vec3(0.6, 0.6, 0.6));
 		int i = 0;
 		setModel(matProg, Model);
-		Model->translate(vec3(tx, ty, tz));
+		//Model->translate(vec3(tx, ty, tz));
 		SetMaterial(switcher);
 		for (i; i < bmesh.size() - 1; i++) {
 			bmesh[i]->draw(matProg);
@@ -611,173 +635,46 @@ public:
 		bmesh[2]->draw(matProg);
 	}
 
+	void updateOffset(Objects *ob, vec3 p) {
+		if (ob->pointIntersect(p)) {
+			offset += 0.05;
+			mat4 model = mat4(1.0f);
+			model = glm::translate(model, glm::vec3(0, 0, 0.05));
+			ob->transformAABB(model);
+			ob->updateAABB();
+		}
+
+	}
 	//void drawWideBook(shared_ptr<MatrixStack> Model, float tx, float ty, float tz)
 
 	void loadbooks(shared_ptr<MatrixStack> Model, glm::mat4 *modelMatrices) {
-		float offset = 0.3 + 0.5*sin(glfwGetTime());
-		for (unsigned int i = 0; i < amount; i++) {
-			offset = 0.3 + 0.5*sin(i*0.4 + glfwGetTime());
-			Model->pushMatrix();
-			Model->translate(vec3(-9.6+0.3*float(i%65), 1.3*float(i/65), offset));
-			Model->rotate(-1.5708, vec3(0, 1, 0));
-			Model->scale(vec3(0.6, 0.6, 0.6));
-			modelMatrices[i] = Model->topMatrix();
-			Model->popMatrix();
+		
+		
+		float forwardOffset = 0.3 + 0.5*sin(glfwGetTime());
+		float verticalOffset = 0;
+		//there are 7 shelves in a bookshelf, split the row in the middle & multiply
+		float sideOffset = -0.3*(float(amount / 14));
+		int limit = amount/7;
+
+		
+		for (unsigned int j = 0; j < 7; j++) {
+			for (unsigned int i = 0; i < limit; i++) {
+				forwardOffset = 0.3 + 0.5*sin(i*0.4 + glfwGetTime());
+				Model->pushMatrix();
+				Model->translate(vec3(sideOffset + 0.3*float(i % 13), verticalOffset, forwardOffset));
+				Model->rotate(-1.5708, vec3(0, 1, 0));
+				Model->scale(vec3(0.6, 0.6, 0.6));
+				modelMatrices[i+j*limit] = Model->topMatrix();
+				Model->popMatrix();
+			}
+			verticalOffset += 1.3;
 		}
+
+
+
 	}
 	
-	void drawBookRow(shared_ptr<MatrixStack> Model, int numOfBooks, bool left, bool right) {
-		float offset = 0.3 + 0.5*sin(glfwGetTime());
-		Model->pushMatrix();
-		//Model->translate(vec3(0, 0, -5));
-		//Model->scale(vec3(1, 1, 10));
-		drawBook(Model, 0, .7, offset / 10);
-		Model->popMatrix();
-		int i = 1;
-		for (i; i < numOfBooks; i++) {
 
-			Model->pushMatrix();
-			offset = 0.3 + 0.5*sin(i*0.4 + glfwGetTime());
-			//Model->translate(vec3(0, 0, -5));
-			//Model->scale(vec3(1, 1, 10));
-			drawBook(Model, i*0.3, .7, offset / 10);
-			Model->popMatrix();
-			Model->pushMatrix();
-			//Model->translate(vec3(0, 0, -5));
-			//Model->scale(vec3(1, 1, 10));
-			drawBook(Model, i*(-0.3), .7, offset / 10);
-			Model->popMatrix();
-
-		}
-		i -= 2;
-		if (left) {
-			Model->pushMatrix();
-			Model->translate(vec3(i*(-0.3), 0.7, 0));
-			Model->scale(vec3(10, 6.5, 1));
-			Model->rotate(1.570796, vec3(0, 0, 1));
-			drawBook(Model, 0, .7, offset);
-			Model->popMatrix();
-		}
-		if (right) {
-			Model->pushMatrix();
-			Model->translate(vec3(3.1*i, 0.7, 0));
-			Model->scale(vec3(10, 6, 1));
-			Model->rotate(1.570796, vec3(0, 0, 1));
-			drawBook(Model, 0, .7, offset);
-			Model->popMatrix();
-		}
-
-
-	}
-
-	void drawBS(shared_ptr<MatrixStack> Projection, shared_ptr<MatrixStack> View, shared_ptr<MatrixStack> Model, int levels, bool left, bool right) {
-
-		for (int i = 0; i < levels; i++) {
-
-			Model->pushMatrix();
-			Model->translate(vec3(0, 1.5, 0));
-			Model->pushMatrix();
-			drawBookRow(Model, 7, left, right);
-			Model->popMatrix();
-
-
-			SetMaterial(3);
-			Model->pushMatrix(); //top of bookshelf
-			Model->translate(vec3(0, 1.5, 0));
-			Model->scale(vec3(2, 0.1, 2));
-			setModel(matProg, Model);
-			cube->draw(matProg);
-
-			Model->popMatrix();
-
-			Model->pushMatrix(); //left of bookshelf
-			Model->translate(vec3(-2, 0.75, 0));
-			Model->scale(vec3(0.1, 1.5, 2));
-			setModel(matProg, Model);
-			cube->draw(matProg);
-
-			Model->popMatrix();
-
-			Model->pushMatrix(); //right of bookshelf
-			Model->translate(vec3(2, 0.75, 0));
-			Model->scale(vec3(0.1, 1.5, 2));
-			setModel(matProg, Model);
-			cube->draw(matProg);
-			Model->popMatrix();
-
-			Model->pushMatrix();//back of bookshelf
-			Model->translate(vec3(0, 0.75, -2));
-			Model->scale(vec3(2, 1.5, 0.1));
-			setModel(matProg, Model);
-			cube->draw(matProg);
-
-			Model->popMatrix();
-
-
-		}
-
-		//draw top stretched row
-		Model->pushMatrix();
-		Model->translate(vec3(0, 1, 0));
-		Model->scale(vec3(1, 10, 1));
-		drawBookRow(Model, 7, false, false);
-		Model->popMatrix();
-
-		//now we are "levels" deep into the stack, pop out to get back to where we were in the beginning
-		for (int i = 0; i < levels; i++) {
-			Model->popMatrix();
-		}
-
-		Model->pushMatrix();
-		SetMaterial(3);
-		Model->translate(vec3(0, 1.5, 0));
-		Model->scale(vec3(4, 0.1, 2));
-
-		setModel(matProg, Model);
-		cube->draw(matProg);
-		Model->popMatrix();
-		Model->pushMatrix();
-
-		Model->scale(vec3(1, 10, 1));
-		Model->translate(vec3(0, -1.2, 0));
-		drawBookRow(Model, 7, false, false);
-		Model->popMatrix();
-
-
-	}
-
-	void drawCross(shared_ptr<MatrixStack> Projection, shared_ptr<MatrixStack> View, shared_ptr<MatrixStack> Model) {
-		matProg->bind();
-		glUniform3f(matProg->getUniform("lightPos"), lTransX, lTransY, lTransZ);
-		glUniform3f(matProg->getUniform("viewPos"), eye.x, eye.y, eye.z);
-		glUniformMatrix4fv(matProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-		glUniformMatrix4fv(matProg->getUniform("V"), 1, GL_FALSE, value_ptr(View->topMatrix()));
-		Model->pushMatrix();
-		int i = 0;
-		Model->translate(vec3(-4,0,-2));
-		Model->scale(vec3(0.5, 0.5, 0.5));
-		drawBS(Projection, View, Model, 7, true, false);
-		Model->popMatrix();
-		
-		for (i = 1; i < 4; i++) {
-			Model->pushMatrix();
-			Model->translate(vec3(-4 + 2 * i, 0, -2));
-			Model->scale(vec3(0.5, 0.5, 0.5));
-			drawBS(Projection, View, Model, 7, false, false);
-			Model->popMatrix();
-		}
-		//draw the torso with these transforms
-
-
-		Model->pushMatrix();
-		Model->translate(vec3(-4 + 2 * i, 0, -2));
-		Model->scale(vec3(0.5, 0.5, 0.5));
-		drawBS(Projection, View, Model, 7, false, true);
-		Model->popMatrix();
-		
-		matProg->unbind();
-
-	}
 
 	void drawBooks() {
 		unsigned int i;
@@ -793,6 +690,7 @@ public:
 			bmesh[2]->draw(matProg);
 		}
 	}
+
 
 	
 	void render() {
@@ -825,7 +723,7 @@ public:
 		auto Model = make_shared<MatrixStack>();
 		// Apply perspective projection.
 		Projection->pushMatrix();
-		Projection->perspective(45.0f, aspect, 0.01f, 100.0f);
+		Projection->perspective(45.0f, aspect, 0.01f, 1000.0f);
 
 
 		//camera movement code
@@ -838,6 +736,9 @@ public:
 		View->loadIdentity();
 
 		View->lookAt(eye, eye + la, up);
+
+
+		crosshair = eye + la * 2.0f;
 		/*
 
 
@@ -902,10 +803,38 @@ public:
 		glUniformMatrix4fv(matProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
 		glUniformMatrix4fv(matProg->getUniform("V"), 1, GL_FALSE, value_ptr(View->topMatrix()));
 
-
+		Model->pushMatrix();
 		Model->translate(vec3(0, 0, -5.5));
 		loadbooks(Model, modelMatrices);
 		drawBooks();
+		Model->popMatrix();
+
+
+		drawBook(Model, 0, 0, 5 + offset);
+		updateOffset(book1, crosshair);
+
+		//Model->pushMatrix();
+		//Model->translate(vec3(0, 0, 5.5));
+		//Model->rotate(radians(180.0f), vec3(0, 1, 0));
+		//loadbooks(Model, modelMatrices);
+		//drawBooks();
+		//Model->popMatrix();
+
+
+		//Model->pushMatrix();
+		//Model->translate(vec3(5.5, 0, 0));
+		//Model->rotate(radians(-90.0f), vec3(0, 1, 0));
+		//loadbooks(Model, modelMatrices);
+		//drawBooks();
+		//Model->popMatrix();
+
+		//Model->pushMatrix();
+		//Model->translate(vec3(-5.5,0, 0));
+		//Model->rotate(radians(90.0f), vec3(0, 1, 0));
+		//loadbooks(Model, modelMatrices);
+		//drawBooks();
+		//Model->popMatrix();
+
 
 
 		//for (unsigned int j = 0; j < amount; j++) {

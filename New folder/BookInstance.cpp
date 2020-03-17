@@ -11,16 +11,14 @@ using namespace glm;
 
 
 Objects::Objects(glm::vec3 minPoint, glm::vec3 maxPoint, unsigned int objID) {
-	initMinP = minPoint;
-	initMaxP = maxPoint;
 	minP = minPoint;
 	maxP = maxPoint;
 	objectID = objectID;
 } 
-//resets aabb and transforms it
+
 void Objects::transformAABB(glm::mat4 transformMat) {
-	glm::vec3 minPoint = vec3(transformMat*glm::vec4(initMinP, 1.0));
-	glm::vec3 maxPoint = vec3(transformMat*glm::vec4(initMaxP, 1.0));
+	glm::vec3 minPoint = vec3(transformMat*glm::vec4(minP, 1.0));
+	glm::vec3 maxPoint = vec3(transformMat*glm::vec4(maxP, 1.0));
 	minP = minPoint;
 	maxP = maxPoint;
 }
